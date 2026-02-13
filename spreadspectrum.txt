@@ -1,0 +1,131 @@
+% Read the first audio file (carrier signal)
+[file1, fs1] = audioread('applause3.wav');
+
+% Read the second audio file (message signal)
+[file2, fs2] = audioread('Conference.wav');
+
+% Check if the sampling rates are the same and resample if needed
+if fs1 ~= fs2
+    fs_common = max(fs1, fs2); % Choose the higher sampling rate
+    if fs1 < fs_common
+        file1 = resample(file1, fs_common, fs1);
+        fs1 = fs_common;
+    end
+    if fs2 < fs_common
+        file2 = resample(file2, fs_common, fs2);
+        fs2 = fs_common;
+    end
+else
+    fs_common = fs1;
+end
+
+% Ensure both audio files have the same length
+if length(file1) ~= length(file2)
+    min_length = min(length(file1), length(file2));
+    file1 = file1(1:min_length);
+    file2 = file2(1:min_length);
+end
+
+% Parameters
+chip_rate = 8; % Number of chips per message bit
+seed = 12345; % Seed for the pseudo-random sequence generator
+
+% Generate pseudo-random sequence
+rng(seed);
+pn_sequence = randi([0, 1], length(file2) * chip_rate, 1) * 2 - 1;
+
+% Spread the message signal
+spread_message = repelem(file2, chip_rate) .* pn_sequence(1:length(file2) * chip_rate);
+
+% Ensure the spread message is the same length as the carrier signal
+spread_message = spread_message(1:length(file1));
+
+% Embed the spread message into the carrier signal
+embedded_signal = file1 + spread_message;
+
+% Normalize the embedded signal to avoid clipping
+embedded_signal = embedded_signal / max(abs(embedded_signal));
+
+% Save the embedded audio signal
+audiowrite('embedded_audio.wav', embedded_signal, fs_common);
+
+% Plot the signals for visualization
+figure;
+subplot(4, 1, 1);
+plot(file1);
+title('Carrier Signal');
+subplot(4, 1, 2);
+plot(file2);
+title('Message Signal');
+subplot(4, 1, 3);
+plot(embedded_signal);
+title('Embedded Signal');
+
+% Plot the spectrograms
+figure;
+subplot(3, 1, 1);
+spectrogram(file1, 256, 250, 256, fs_common, 'yaxis');
+title('Spectrogram of Carrier Signal');
+subplot(3, 1, 2);
+spectrogram(file2, 256, 250, 256, fs_common, 'yaxis');
+title('Spectrogram of Message Signal');
+subplot(3, 1, 3);
+spectrogram(embedded_signal, 256, 250, 256, fs_common, 'yaxis');
+title('Spectrogram of Embedded Signal');
+
+disp('Spread spectrum steganography embedding completed successfully.');
+
+% Play the audio signals
+disp('Playing carrier signal...');
+sound(file1, fs_common);
+pause(length(file1)/fs_common + 1); % Wait for the audio to finish
+
+disp('Playing message signal...');
+sound(file2, fs_common);
+pause(length(file2)/fs_common + 1); % Wait for the audio to finish
+
+disp('Playing embedded signal...');
+sound(embedded_signal, fs_common);
+pause(length(embedded_signal)/fs_common + 1); % Wait for the audio to finish
+
+% Extraction Process
+% Generate the same pseudo-random sequence
+rng(seed);
+pn_sequence = randi([0, 1], length(file2) * chip_rate, 1) * 2 - 1;
+
+% Extract the spread message from the embedded signal
+spread_message_extracted = embedded_signal - file1;
+
+% Ensure the length of spread_message_extracted is divisible by chip_rate
+extra_samples = mod(length(spread_message_extracted), chip_rate);
+if extra_samples ~= 0
+    spread_message_extracted = spread_message_extracted(1:end-extra_samples);
+end
+
+% Despread the extracted message to get back the original message
+despread_message = spread_message_extracted .* pn_sequence(1:length(spread_message_extracted));
+
+% Reshape and average to decode the message
+decoded_message = mean(reshape(despread_message, chip_rate, []), 1)';
+
+% Normalize the extracted message
+decoded_message = decoded_message / max(abs(decoded_message));
+
+% Save the extracted message to a new audio file
+audiowrite('extracted_message.wav', decoded_message, fs_common);
+
+% Plot the extracted message signal for visualization
+figure;
+subplot(2, 1, 1);
+plot(decoded_message);
+title('Extracted Message Signal');
+subplot(2, 1, 2);
+spectrogram(decoded_message, 256, 250, 256, fs_common, 'yaxis');
+title('Spectrogram of Extracted Message Signal');
+
+disp('Message extraction completed successfully.');
+
+% Play the extracted message signal
+disp('Playing extracted message signal...');
+sound(decoded_message, fs_common);
+pause(length(decoded_message)/fs_common + 1); % Wait for the audio to finish
